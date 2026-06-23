@@ -10,20 +10,40 @@
     <main id="stage" class="stage normal">
       <h1 class="title">Cronômetro</h1>
 
-      <input
-        id="display"
-        class="display"
-        type="text"
-        inputmode="numeric"
-        value="00:00:00"
-        autocomplete="off"
-        spellcheck="false"
-        aria-label="Tempo no formato horas, minutos e segundos"
-        aria-describedby="hint error"
-      />
+      <!-- Anel de progresso + número central -->
+      <div class="ring">
+        <svg class="ring-svg" viewBox="0 0 300 300" aria-hidden="true">
+          <circle class="ring-track" cx="150" cy="150" r="135" />
+          <circle class="ring-progress" cx="150" cy="150" r="135" />
+        </svg>
+
+        <div class="ring-center">
+          <input
+            id="display"
+            class="display"
+            type="text"
+            inputmode="numeric"
+            value="00:00:00"
+            autocomplete="off"
+            spellcheck="false"
+            aria-label="Tempo no formato horas, minutos e segundos"
+            aria-describedby="hint error"
+          />
+        </div>
+      </div>
+
+      <!-- Atalhos rápidos (só aparecem quando parado) -->
+      <div id="presets" class="presets" role="group" aria-label="Atalhos de tempo">
+        <button type="button" class="chip" data-delta="60000" aria-label="Somar 1 minuto">+1m</button>
+        <button type="button" class="chip" data-delta="300000" aria-label="Somar 5 minutos">+5m</button>
+        <button type="button" class="chip" data-delta="600000" aria-label="Somar 10 minutos">+10m</button>
+        <button type="button" class="chip" data-delta="1800000" aria-label="Somar 30 minutos">+30m</button>
+        <button type="button" class="chip" data-delta="3600000" aria-label="Somar 1 hora">+1h</button>
+        <button id="btn-clear" type="button" class="chip chip-clear" aria-label="Limpar o tempo">⟲ Limpar</button>
+      </div>
 
       <p id="hint" class="hint">
-        Digite os números (até 99:59:59) e clique em Iniciar.
+        Toque nos atalhos (ou digite) e clique em Iniciar.
       </p>
       <p id="error" class="error" role="alert" hidden>
         Tempo inválido: minutos e segundos devem ser 00–59 e o total maior que zero.
@@ -31,11 +51,10 @@
 
       <div class="controls">
         <button id="btn-toggle" type="button" class="btn btn-primary" disabled>
-          Iniciar
+          <span class="btn-icon" aria-hidden="true">▶</span>
+          <span class="btn-label">Iniciar</span>
         </button>
-        <button id="btn-reset" type="button" class="btn btn-secondary">
-          Resetar
-        </button>
+        <button id="btn-reset" type="button" class="btn btn-secondary">Resetar</button>
       </div>
 
       <div id="finished-banner" class="finished-banner" hidden>⏰ Tempo esgotado!</div>

@@ -4,7 +4,7 @@
  */
 
 import { createTimer } from './timer.js';
-import { formatTime, digitsToParts } from './format.js';
+import { formatTime, digitsToParts, applyPreset } from './format.js';
 import { stageFor, shouldBeep, createBeeper } from './effects.js';
 
 const timer = createTimer({ now: () => performance.now() });
@@ -13,18 +13,28 @@ const beeper = createBeeper();
 // --- Elementos da tela ---
 const stageEl = document.getElementById('stage');
 const displayEl = document.getElementById('display');
+const presetsEl = document.getElementById('presets');
+const btnClear = document.getElementById('btn-clear');
 const hintEl = document.getElementById('hint');
 const errorEl = document.getElementById('error');
 const btnToggle = document.getElementById('btn-toggle');
+const btnLabel = btnToggle.querySelector('.btn-label');
 const btnReset = document.getElementById('btn-reset');
 const bannerEl = document.getElementById('finished-banner');
 const srStatusEl = document.getElementById('sr-status');
+const ringProgress = document.querySelector('.ring-progress');
 
 const STAGE_CLASSES = ['normal', 'warning', 'danger', 'finished'];
 const TOGGLE_LABELS = { IDLE: 'Iniciar', FINISHED: 'Iniciar', RUNNING: 'Pausar', PAUSED: 'Retomar' };
 
+// Circunferência do anel (r=135 no viewBox 300). Definida uma vez no SVG.
+const RING_RADIUS = 135;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+ringProgress.style.strokeDasharray = String(RING_CIRCUMFERENCE);
+
 // --- Estado da camada de tela ---
 let digitsString = ''; // dígitos da máscara (a duração configurada)
+let totalMs = 0; // duração capturada no start (base do anel de progresso)
 let rafId = null;
 let lastBeepSecond = -1;
 
@@ -53,6 +63,20 @@ function displayText() {
   return formatTime(Math.ceil(rem / 1000) * 1000);
 }
 
+/** Fração do anel preenchida (1 = cheio, 0 = vazio). */
+function ringFraction() {
+  const status = timer.getStatus();
+  if (status === 'IDLE') return 1; // prévia cheia
+  if (status === 'FINISHED' || totalMs <= 0) return 0;
+  return Math.max(0, Math.min(1, timer.getRemaining() / totalMs));
+}
+
+/** Atualiza o anel SVG a partir da fração atual. */
+function renderRing() {
+  const offset = RING_CIRCUMFERENCE * (1 - ringFraction());
+  ringProgress.style.strokeDashoffset = String(offset);
+}
+
 /** Redesenha toda a tela a partir do estado atual do motor. */
 function render() {
   const status = timer.getStatus();
@@ -64,12 +88,16 @@ function render() {
   displayEl.readOnly = !isIdle;
   displayEl.setAttribute('aria-invalid', String(isIdle && !valid));
 
-  // Estágio visual (uma classe por vez)
+  // Estágio visual (uma classe por vez) + anel
   stageEl.classList.remove(...STAGE_CLASSES);
   stageEl.classList.add(currentStage());
+  renderRing();
+
+  // Atalhos só quando parado
+  presetsEl.hidden = !isIdle;
 
   // Botões
-  btnToggle.textContent = TOGGLE_LABELS[status];
+  btnLabel.textContent = TOGGLE_LABELS[status];
   btnToggle.setAttribute('aria-label', TOGGLE_LABELS[status]);
   // Iniciar só é permitido com tempo válido; Pausar/Retomar sempre.
   btnToggle.disabled = (status === 'IDLE' || status === 'FINISHED') ? !valid : false;
@@ -126,6 +154,7 @@ function onToggle() {
   if (status === 'IDLE' || status === 'FINISHED') {
     const { ms, valid } = digitsToParts(digitsString);
     if (!valid) return; // guarda extra (o botão já estaria desabilitado)
+    totalMs = ms; // base do anel de progresso
     beeper.resume(); // cria/retoma o AudioContext sob o gesto do usuário
     timer.setDuration(ms);
     timer.start();
@@ -149,6 +178,18 @@ function onReset() {
   announce('Cronômetro reiniciado.');
   render();
   displayEl.focus();
+}
+
+/** Clique nos chips de atalho (somar tempo / limpar). Só vale parado. */
+function onPresetClick(e) {
+  const btn = e.target.closest('.chip');
+  if (!btn || timer.getStatus() !== 'IDLE') return;
+  if (btn === btnClear) {
+    digitsString = '';
+  } else {
+    digitsString = applyPreset(digitsString, Number(btn.dataset.delta));
+  }
+  render();
 }
 
 function onDisplayKeydown(e) {
@@ -196,6 +237,7 @@ function onVisibilityChange() {
 
 btnToggle.addEventListener('click', onToggle);
 btnReset.addEventListener('click', onReset);
+presetsEl.addEventListener('click', onPresetClick);
 displayEl.addEventListener('keydown', onDisplayKeydown);
 displayEl.addEventListener('paste', onDisplayPaste);
 document.addEventListener('visibilitychange', onVisibilityChange);
