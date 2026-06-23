@@ -5,6 +5,7 @@
   "description": "Cronômetro de contagem regressiva em JS puro, sem dependências.",
   "type": "module",
   "scripts": {
+    "start": "node server.mjs",
     "test": "node --test"
   },
   "engines": {

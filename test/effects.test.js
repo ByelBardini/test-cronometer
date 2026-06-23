@@ -1,12 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { stageFor, shouldBeep, THRESHOLDS } from '../src/effects.js';
+import { stageFor, shouldBeep, rednessFor, THRESHOLDS } from '../src/effects.js';
 
 test('THRESHOLDS: valores esperados', () => {
   assert.equal(THRESHOLDS.WARN_MS, 60000);
   assert.equal(THRESHOLDS.DANGER_MS, 10000);
   assert.equal(THRESHOLDS.BEEP_MS, 5000);
+  assert.equal(THRESHOLDS.REDDEN_MS, 60000);
 });
 
 test('stageFor: acima de 60s é normal', () => {
@@ -54,4 +55,42 @@ test('shouldBeep: zero não toca (é o beep final, não o curto)', () => {
 
 test('shouldBeep: negativo não toca', () => {
   assert.equal(shouldBeep(-1), false);
+});
+
+// --- rednessFor: intensidade do avermelhamento do fundo (modo foco), em [0,1] ---
+
+test('rednessFor: acima de 60s não avermelha (0)', () => {
+  assert.equal(rednessFor(60001), 0);
+  assert.equal(rednessFor(120000), 0);
+});
+
+test('rednessFor: exatamente 60s ainda é 0 (início do trecho)', () => {
+  assert.equal(rednessFor(60000), 0);
+});
+
+test('rednessFor: zero é totalmente vermelho (1)', () => {
+  assert.equal(rednessFor(0), 1);
+});
+
+test('rednessFor: negativo trava em 1 (passou do zero)', () => {
+  assert.equal(rednessFor(-5000), 1);
+});
+
+test('rednessFor: sempre dentro de [0,1]', () => {
+  for (const ms of [70000, 60000, 30000, 10000, 1000, 0, -1000]) {
+    const r = rednessFor(ms);
+    assert.ok(r >= 0 && r <= 1, `fora de faixa em ${ms}: ${r}`);
+  }
+});
+
+test('rednessFor: monotônica — menos tempo, mais vermelho', () => {
+  assert.ok(rednessFor(45000) < rednessFor(30000));
+  assert.ok(rednessFor(30000) < rednessFor(10000));
+  assert.ok(rednessFor(10000) < rednessFor(2000));
+});
+
+test('rednessFor: acelera no fim (ease-in)', () => {
+  const r10 = rednessFor(10000);
+  assert.ok(r10 > 0.6 && r10 < 0.7, `esperado ~0.67 em 10s, veio ${r10}`);
+  assert.ok(rednessFor(30000) < 0.3, 'na metade do trecho deve estar bem abaixo de 0.5');
 });

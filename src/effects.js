@@ -8,6 +8,7 @@ export const THRESHOLDS = {
   WARN_MS: 60000, // <= 60s  -> "warning" (amarelo)
   DANGER_MS: 10000, // <= 10s -> "danger" (vermelho + pulsar)
   BEEP_MS: 5000, // <= 5s    -> beep curto a cada segundo
+  REDDEN_MS: 60000, // <= 60s -> fundo do modo foco começa a avermelhar
 };
 
 /**
@@ -31,6 +32,33 @@ export function stageFor(remainingMs) {
  */
 export function shouldBeep(remainingMs) {
   return remainingMs > 0 && remainingMs <= THRESHOLDS.BEEP_MS;
+}
+
+/**
+ * Intensidade do "avermelhamento" do fundo no modo foco: 0 (sem vermelho) a 1
+ * (vermelho total), em função do tempo restante. Puro e testável.
+ *
+ * Curva ease-in: a "proximidade do zero" (closeness) é elevada a uma potência,
+ * para o vermelho ser sutil cedo e acelerar no fim. Depende SÓ do restante
+ * (não da duração total): um timer de 5min e um de 1min avermelham igual no
+ * trecho final.
+ *
+ *   remaining >= 60s -> 0          (antes do trecho final)
+ *   remaining == 60s -> 0          (fronteira)
+ *   remaining == 10s -> ~0.673     (ainda discreto)
+ *   remaining -> 0   -> 1          (vermelho total)
+ *   remaining < 0    -> 1          (passou do zero: trava no máximo)
+ *
+ * @param {number} remainingMs
+ * @returns {number} valor em [0,1]
+ */
+export function rednessFor(remainingMs) {
+  const span = THRESHOLDS.REDDEN_MS;
+  const remaining = Math.max(0, remainingMs); // negativos contam como zero
+  if (remaining >= span) return 0;
+  const closeness = (span - remaining) / span; // 0 em 60s, 1 em 0
+  const eased = closeness ** 2.2; // ease-in: acelera no fim
+  return Math.min(1, Math.max(0, eased)); // trava de segurança em [0,1]
 }
 
 /**

@@ -4,29 +4,45 @@
  */
 
 import { createTimer } from './timer.js';
-import { formatTime, digitsToParts } from './format.js';
-import { stageFor, shouldBeep, createBeeper } from './effects.js';
+import { formatTime, digitsToParts, applyPreset } from './format.js';
+import { stageFor, shouldBeep, rednessFor, createBeeper } from './effects.js';
 
 const timer = createTimer({ now: () => performance.now() });
 const beeper = createBeeper();
 
 // --- Elementos da tela ---
+const bodyEl = document.body;
 const stageEl = document.getElementById('stage');
 const displayEl = document.getElementById('display');
+const presetsEl = document.getElementById('presets');
+const btnClear = document.getElementById('btn-clear');
 const hintEl = document.getElementById('hint');
 const errorEl = document.getElementById('error');
 const btnToggle = document.getElementById('btn-toggle');
+const btnLabel = btnToggle.querySelector('.btn-label');
 const btnReset = document.getElementById('btn-reset');
+const btnExit = document.getElementById('btn-exit');
 const bannerEl = document.getElementById('finished-banner');
 const srStatusEl = document.getElementById('sr-status');
+const ringProgress = document.querySelector('.ring-progress');
 
 const STAGE_CLASSES = ['normal', 'warning', 'danger', 'finished'];
 const TOGGLE_LABELS = { IDLE: 'Iniciar', FINISHED: 'Iniciar', RUNNING: 'Pausar', PAUSED: 'Retomar' };
 
+// Circunferência do anel (r=135 no viewBox 300). Definida uma vez no SVG.
+const RING_RADIUS = 135;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+ringProgress.style.strokeDasharray = String(RING_CIRCUMFERENCE);
+
 // --- Estado da camada de tela ---
 let digitsString = ''; // dígitos da máscara (a duração configurada)
+let totalMs = 0; // duração capturada no start (base do anel de progresso)
 let rafId = null;
 let lastBeepSecond = -1;
+let inFocus = false; // modo foco (overlay de tela cheia) ativo?
+let hideControlsTimer = null; // timer do auto-ocultar dos controles no foco
+
+const HIDE_CONTROLS_MS = 3000; // ociosidade até sumir os controles no foco
 
 const pad2 = (n) => String(n).padStart(2, '0');
 const announce = (msg) => { srStatusEl.textContent = msg; };
@@ -53,6 +69,20 @@ function displayText() {
   return formatTime(Math.ceil(rem / 1000) * 1000);
 }
 
+/** Fração do anel preenchida (1 = cheio, 0 = vazio). */
+function ringFraction() {
+  const status = timer.getStatus();
+  if (status === 'IDLE') return 1; // prévia cheia
+  if (status === 'FINISHED' || totalMs <= 0) return 0;
+  return Math.max(0, Math.min(1, timer.getRemaining() / totalMs));
+}
+
+/** Atualiza o anel SVG a partir da fração atual. */
+function renderRing() {
+  const offset = RING_CIRCUMFERENCE * (1 - ringFraction());
+  ringProgress.style.strokeDashoffset = String(offset);
+}
+
 /** Redesenha toda a tela a partir do estado atual do motor. */
 function render() {
   const status = timer.getStatus();
@@ -64,15 +94,28 @@ function render() {
   displayEl.readOnly = !isIdle;
   displayEl.setAttribute('aria-invalid', String(isIdle && !valid));
 
-  // Estágio visual (uma classe por vez)
+  // Estágio visual (uma classe por vez) + anel
   stageEl.classList.remove(...STAGE_CLASSES);
   stageEl.classList.add(currentStage());
+  renderRing();
 
-  // Botões
-  btnToggle.textContent = TOGGLE_LABELS[status];
+  // Modo foco: classe no body + cor do fundo avermelhando por frame
+  bodyEl.classList.toggle('focus', inFocus);
+  if (inFocus) {
+    const redness = status === 'FINISHED' ? 1 : rednessFor(timer.getRemaining());
+    bodyEl.style.setProperty('--focus-redness', redness.toFixed(3));
+  }
+
+  // Atalhos só quando parado
+  presetsEl.hidden = !isIdle;
+
+  // Botões: no foco, Resetar dá lugar a Sair
+  btnLabel.textContent = TOGGLE_LABELS[status];
   btnToggle.setAttribute('aria-label', TOGGLE_LABELS[status]);
   // Iniciar só é permitido com tempo válido; Pausar/Retomar sempre.
   btnToggle.disabled = (status === 'IDLE' || status === 'FINISHED') ? !valid : false;
+  btnReset.hidden = inFocus;
+  btnExit.hidden = !inFocus;
 
   // Banner / erro / dica
   bannerEl.hidden = status !== 'FINISHED';
@@ -117,7 +160,32 @@ function onFinished() {
   render();
   beeper.finalBeep();
   announce('Tempo esgotado!');
-  btnReset.focus();
+  // No foco o Resetar fica escondido; mostra os controles e foca o Sair.
+  if (inFocus) {
+    showControls();
+    btnExit.focus();
+  } else {
+    btnReset.focus();
+  }
+}
+
+// --- Controles auto-ocultáveis (só no modo foco) ---
+function showControls() {
+  if (!inFocus) return;
+  bodyEl.classList.add('controls-visible');
+  if (hideControlsTimer) clearTimeout(hideControlsTimer);
+  hideControlsTimer = null;
+  // Pausado: mantém os controles visíveis (o usuário precisa deles à mão).
+  if (timer.getStatus() === 'PAUSED') return;
+  hideControlsTimer = setTimeout(hideControls, HIDE_CONTROLS_MS);
+}
+
+function hideControls() {
+  bodyEl.classList.remove('controls-visible');
+  if (hideControlsTimer) {
+    clearTimeout(hideControlsTimer);
+    hideControlsTimer = null;
+  }
 }
 
 // --- Eventos ---
@@ -126,29 +194,63 @@ function onToggle() {
   if (status === 'IDLE' || status === 'FINISHED') {
     const { ms, valid } = digitsToParts(digitsString);
     if (!valid) return; // guarda extra (o botão já estaria desabilitado)
+    totalMs = ms; // base do anel de progresso
     beeper.resume(); // cria/retoma o AudioContext sob o gesto do usuário
     timer.setDuration(ms);
     timer.start();
-    announce('Cronômetro iniciado.');
+    inFocus = true; // entra no modo foco (tela cheia)
+    announce('Cronômetro iniciado. Modo foco.');
     startLoop();
+    showControls(); // pisca os controles por alguns segundos e some
   } else if (status === 'RUNNING') {
     timer.pause();
     cancelLoop();
     announce('Pausado.');
     render();
+    showControls(); // pausado: controles ficam visíveis (não auto-some)
   } else if (status === 'PAUSED') {
     timer.resume();
     announce('Retomado.');
     startLoop();
+    showControls(); // re-arma o auto-ocultar ao retomar
   }
 }
 
 function onReset() {
+  leaveFocus();
   cancelLoop();
   timer.reset(); // volta a IDLE com a duração configurada
   announce('Cronômetro reiniciado.');
   render();
   displayEl.focus();
+}
+
+/** Sair do modo foco (botão Sair / Esc): para e volta para a configuração. */
+function onExit() {
+  leaveFocus();
+  cancelLoop();
+  timer.reset();
+  announce('Modo foco encerrado.');
+  render();
+  displayEl.focus();
+}
+
+/** Encerra o estado de foco e seus controles auto-ocultáveis. */
+function leaveFocus() {
+  inFocus = false;
+  hideControls();
+}
+
+/** Clique nos chips de atalho (somar tempo / limpar). Só vale parado. */
+function onPresetClick(e) {
+  const btn = e.target.closest('.chip');
+  if (!btn || timer.getStatus() !== 'IDLE') return;
+  if (btn === btnClear) {
+    digitsString = '';
+  } else {
+    digitsString = applyPreset(digitsString, Number(btn.dataset.delta));
+  }
+  render();
 }
 
 function onDisplayKeydown(e) {
@@ -184,6 +286,29 @@ function onDisplayPaste(e) {
   render();
 }
 
+/** Qualquer interação revela os controles no modo foco (e re-arma o auto-ocultar). */
+function onActivity() {
+  if (inFocus) showControls();
+}
+
+/** Atalhos de teclado válidos só no modo foco: Esc sai, Espaço pausa/retoma. */
+function onFocusKeydown(e) {
+  if (!inFocus) return;
+  showControls();
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    onExit();
+    return;
+  }
+  if (e.key === ' ' || e.key === 'Spacebar') {
+    // Se o foco está num botão, deixa o próprio botão tratar o Espaço.
+    if (document.activeElement && document.activeElement.tagName === 'BUTTON') return;
+    e.preventDefault();
+    const status = timer.getStatus();
+    if (status === 'RUNNING' || status === 'PAUSED') onToggle();
+  }
+}
+
 // Detecta o fim mesmo se a aba estava em segundo plano (rAF fica estrangulado).
 function onVisibilityChange() {
   if (document.visibilityState !== 'visible') return;
@@ -196,9 +321,14 @@ function onVisibilityChange() {
 
 btnToggle.addEventListener('click', onToggle);
 btnReset.addEventListener('click', onReset);
+btnExit.addEventListener('click', onExit);
+presetsEl.addEventListener('click', onPresetClick);
 displayEl.addEventListener('keydown', onDisplayKeydown);
 displayEl.addEventListener('paste', onDisplayPaste);
 document.addEventListener('visibilitychange', onVisibilityChange);
+document.addEventListener('mousemove', onActivity, { passive: true });
+document.addEventListener('touchstart', onActivity, { passive: true });
+document.addEventListener('keydown', onFocusKeydown);
 
 // Estado inicial na tela
 render();
