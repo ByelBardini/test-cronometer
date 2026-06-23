@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cronômetro</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main id="stage" class="stage normal">
+      <h1 class="title">Cronômetro</h1>
+
+      <input
+        id="display"
+        class="display"
+        type="text"
+        inputmode="numeric"
+        value="00:00:00"
+        autocomplete="off"
+        spellcheck="false"
+        aria-label="Tempo no formato horas, minutos e segundos"
+        aria-describedby="hint error"
+      />
+
+      <p id="hint" class="hint">
+        Digite os números (até 99:59:59) e clique em Iniciar.
+      </p>
+      <p id="error" class="error" role="alert" hidden>
+        Tempo inválido: minutos e segundos devem ser 00–59 e o total maior que zero.
+      </p>
+
+      <div class="controls">
+        <button id="btn-toggle" type="button" class="btn btn-primary" disabled>
+          Iniciar
+        </button>
+        <button id="btn-reset" type="button" class="btn btn-secondary">
+          Resetar
+        </button>
+      </div>
+
+      <div id="finished-banner" class="finished-banner" hidden>⏰ Tempo esgotado!</div>
+
+      <p id="sr-status" class="sr-only" aria-live="assertive"></p>
+    </main>
+
+    <script type="module" src="src/app.js"></script>
+  </body>
+</html>

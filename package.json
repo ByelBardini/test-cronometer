@@ -1,0 +1,13 @@
+{
+  "name": "countdown-timer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cronômetro de contagem regressiva em JS puro, sem dependências.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
