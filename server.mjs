@@ -31,8 +31,10 @@ const server = createServer(async (req, res) => {
   // Resolve o caminho pedido dentro de ROOT, barrando "../" (path traversal).
   const urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
   const relative = normalize(urlPath).replace(/^(\.\.[/\\])+/, '');
-  let filePath = join(ROOT, relative === '/' ? 'index.html' : relative);
-  if (filePath.endsWith('/')) filePath = join(filePath, 'index.html');
+  let filePath = join(ROOT, relative);
+  // Diretório raiz ou caminho terminado em "/" servem o index.html.
+  // (No Windows normalize('/') vira '\\', então o teste tem de usar a URL, não `relative`.)
+  if (urlPath.endsWith('/')) filePath = join(filePath, 'index.html');
 
   try {
     const data = await readFile(filePath);
