@@ -220,6 +220,11 @@ body {
 
 .btn:active { transform: translateY(1px); }
 
+/* o atributo [hidden] precisa vencer o display:inline-flex acima */
+.btn[hidden] {
+  display: none;
+}
+
 .btn-icon { font-size: 0.85em; }
 
 .btn-primary {
@@ -261,6 +266,90 @@ body {
 
 .stage.finished .display {
   animation: shake 0.4s ease-in-out 3;
+}
+
+/* ---- Modo foco: overlay de viewport inteira ao dar play ---- */
+body.focus {
+  padding: 0;
+  --focus-base: #0b1220; /* mesmo tom escuro do app */
+  --focus-red: #7f1d1d; /* vermelho profundo, não berrante */
+  --focus-redness: 0; /* atualizado por frame em app.js (0..1) */
+  /* lerp base<->vermelho via color-mix; suavidade vem do render() por frame */
+  background:
+    radial-gradient(1200px 800px at 50% 42%,
+      color-mix(in srgb, var(--focus-red) calc(var(--focus-redness) * 72%), var(--focus-base)) 0%,
+      color-mix(in srgb, var(--focus-red) calc(var(--focus-redness) * 100%), var(--focus-base)) 100%);
+}
+
+body.focus #stage {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  max-width: none;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent; /* deixa o fundo avermelhado do body aparecer */
+  box-shadow: none;
+  display: grid;
+  place-items: center;
+  z-index: 50;
+}
+
+/* Esconde tudo que não é o contador */
+body.focus .title,
+body.focus .presets,
+body.focus #hint,
+body.focus #error,
+body.focus .ring-svg {
+  display: none;
+}
+
+/* O container do número fica centralizado, sem a geometria do anel */
+body.focus .ring {
+  width: auto;
+  aspect-ratio: auto;
+}
+body.focus .ring-center {
+  position: static;
+}
+
+/* Número GIGANTE (min(22vw,30vh) evita cortar 99:59:59 em telas largas/baixas) */
+body.focus .display {
+  font-size: clamp(4rem, min(22vw, 30vh), 16rem);
+  letter-spacing: 0.01em;
+  pointer-events: none; /* sem teclado mobile; toque vai pro auto-ocultar */
+}
+
+/* Banner final sobre o fundo vermelho */
+body.focus #finished-banner:not([hidden]) {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 12vh;
+  text-align: center;
+  font-size: clamp(1.3rem, 4vw, 2.2rem);
+}
+
+/* Barra de controles flutuante e auto-ocultável (Pausar/Retomar + Sair) */
+body.focus .controls {
+  position: fixed;
+  left: 50%;
+  bottom: 6vh;
+  transform: translateX(-50%);
+  margin: 0;
+  z-index: 60;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+/* visível ao interagir (controls-visible) ou ao tabular pra dentro (a11y) */
+body.focus.controls-visible .controls,
+body.focus .controls:focus-within {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* ---- Acessibilidade: conteúdo só para leitor de tela ---- */
@@ -305,4 +394,6 @@ body {
   .btn,
   .chip,
   .ring-progress { transition: none; }
+  /* o avermelhamento do fundo é informacional e não usa animação CSS — fica */
+  body.focus .controls { transition: none; }
 }
