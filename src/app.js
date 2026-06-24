@@ -39,10 +39,12 @@ let digitsString = ''; // dígitos da máscara (a duração configurada)
 let totalMs = 0; // duração capturada no start (base do anel de progresso)
 let rafId = null;
 let lastBeepSecond = -1;
+let finalSoundFired = false; // o som final já começou? (evita disparo duplo)
 let inFocus = false; // modo foco (overlay de tela cheia) ativo?
 let hideControlsTimer = null; // timer do auto-ocultar dos controles no foco
 
 const HIDE_CONTROLS_MS = 3000; // ociosidade até sumir os controles no foco
+const FINAL_LEAD_MS = 2000; // o som final começa este tanto antes de zerar
 
 const pad2 = (n) => String(n).padStart(2, '0');
 const announce = (msg) => { srStatusEl.textContent = msg; };
@@ -136,6 +138,12 @@ function loop() {
       beeper.shortBeep();
       lastBeepSecond = sec;
     }
+    // Dispara o som final 2s antes de zerar (toca por cima da contagem),
+    // subindo o volume aos poucos ao longo desse intervalo.
+    if (rem <= FINAL_LEAD_MS && !finalSoundFired) {
+      beeper.finalBeep(Math.max(0, rem));
+      finalSoundFired = true;
+    }
     rafId = requestAnimationFrame(loop);
   } else if (status === 'FINISHED') {
     onFinished();
@@ -158,9 +166,14 @@ function cancelLoop() {
 function onFinished() {
   cancelLoop();
   render();
-  beeper.finalBeep();
+  // Normalmente o som já começou 2s antes; só dispara aqui se ainda não tocou
+  // (ex.: timer com duração menor que o lead, ou aba que estava em segundo plano).
+  if (!finalSoundFired) {
+    beeper.finalBeep();
+    finalSoundFired = true;
+  }
   announce('Tempo esgotado!');
-  // No foco o Resetar fica escondido; mostra os controles e foca o Sair.
+  // Quando zera: no foco mostra o "Voltar" (e o foca); fora dele, foca o Resetar.
   if (inFocus) {
     showControls();
     btnExit.focus();
@@ -195,6 +208,7 @@ function onToggle() {
     const { ms, valid } = digitsToParts(digitsString);
     if (!valid) return; // guarda extra (o botão já estaria desabilitado)
     totalMs = ms; // base do anel de progresso
+    finalSoundFired = false; // novo ciclo: o som final ainda vai tocar
     beeper.resume(); // cria/retoma o AudioContext sob o gesto do usuário
     timer.setDuration(ms);
     timer.start();
@@ -229,6 +243,7 @@ function onReset() {
 function onExit() {
   leaveFocus();
   cancelLoop();
+  beeper.stopFinal(); // "Voltar": corta o som final se ainda estiver tocando
   timer.reset();
   announce('Modo foco encerrado.');
   render();
