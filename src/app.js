@@ -111,13 +111,17 @@ function render() {
   // Atalhos só quando parado
   presetsEl.hidden = !isIdle;
 
-  // Botões: no foco, Resetar dá lugar a Sair
+  // Botões: no modo foco a tela é só o contador — Pausar/Retomar e Sair ficam
+  // escondidos (use Espaço para pausar/retomar e Esc para sair). Fora do foco,
+  // mostra Iniciar + Resetar normalmente.
   btnLabel.textContent = TOGGLE_LABELS[status];
   btnToggle.setAttribute('aria-label', TOGGLE_LABELS[status]);
   // Iniciar só é permitido com tempo válido; Pausar/Retomar sempre.
   btnToggle.disabled = (status === 'IDLE' || status === 'FINISHED') ? !valid : false;
+  btnToggle.hidden = inFocus; // esconde Pausar/Retomar no foco
   btnReset.hidden = inFocus;
-  btnExit.hidden = !inFocus;
+  // "Voltar" só aparece quando o tempo zera no foco; durante a contagem fica oculto.
+  btnExit.hidden = !(inFocus && status === 'FINISHED');
 
   // Banner / erro / dica
   bannerEl.hidden = status !== 'FINISHED';
@@ -188,8 +192,9 @@ function showControls() {
   bodyEl.classList.add('controls-visible');
   if (hideControlsTimer) clearTimeout(hideControlsTimer);
   hideControlsTimer = null;
-  // Pausado: mantém os controles visíveis (o usuário precisa deles à mão).
-  if (timer.getStatus() === 'PAUSED') return;
+  // Pausado ou zerado: mantém os controles visíveis (o usuário precisa deles à mão).
+  const st = timer.getStatus();
+  if (st === 'PAUSED' || st === 'FINISHED') return;
   hideControlsTimer = setTimeout(hideControls, HIDE_CONTROLS_MS);
 }
 
@@ -306,13 +311,13 @@ function onActivity() {
   if (inFocus) showControls();
 }
 
-/** Atalhos de teclado válidos só no modo foco: Esc sai, Espaço pausa/retoma. */
+/** Atalhos de teclado válidos só no modo foco: Espaço pausa/retoma. */
 function onFocusKeydown(e) {
   if (!inFocus) return;
   showControls();
   if (e.key === 'Escape') {
+    // Esc não deve sair do modo foco; apenas revela os controles.
     e.preventDefault();
-    onExit();
     return;
   }
   if (e.key === ' ' || e.key === 'Spacebar') {
